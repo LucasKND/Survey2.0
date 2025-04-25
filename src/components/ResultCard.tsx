@@ -10,11 +10,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { trackClick, useViewTimeTracking } from '../lib/firebase';
 
 const ResultCard: React.FC = () => {
   const { result, resetSurvey } = useSurvey();
   const [timeLeft, setTimeLeft] = useState(900);
   const [isOpen, setIsOpen] = useState(false);
+  // Rastreia o tempo de visualização da página de resultados
+  const endViewTracking = useViewTimeTracking('pagina-resultados');
   
   useEffect(() => {
     if (!timeLeft) return;
@@ -25,6 +28,20 @@ const ResultCard: React.FC = () => {
     
     return () => clearInterval(timer);
   }, [timeLeft]);
+  
+  // Rastreamento de visualização da página de resultados
+  useEffect(() => {
+    // Registra que o usuário chegou aos resultados
+    trackClick('view-resultado', { 
+      resultadoTipo: result?.title,
+      preco: result?.discountPrice
+    });
+    
+    // Quando o componente desmontar, registra o tempo total de visualização
+    return () => {
+      endViewTracking();
+    };
+  }, [result, endViewTracking]);
   
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
@@ -54,6 +71,37 @@ const ResultCard: React.FC = () => {
       description: "Acesso ao mini-curso 'Autoridade Digital em 7 Dias'"
     }
   ];
+  
+  // Handlers para rastreamento de cliques
+  const handleGarantiaToggle = () => {
+    trackClick('toggle-garantias', { 
+      estado: !isOpen ? 'expandido' : 'recolhido'
+    });
+    setIsOpen(!isOpen);
+  };
+  
+  const handleComprarClick = () => {
+    trackClick('btn-comprar', { 
+      resultadoTipo: result.title,
+      preco: result.discountPrice,
+      tempoRestante: timeLeft
+    });
+    // Continua com a ação original do botão
+    window.location.href = "https://pay.seunegocio.com"; // Substitua pela URL real de checkout
+  };
+  
+  const handleRefazerClick = () => {
+    trackClick('btn-refazer-quiz', { 
+      resultadoTipo: result.title 
+    });
+    resetSurvey();
+  };
+  
+  const handleBonusClick = (bonusTitle: string) => {
+    trackClick('click-bonus', { 
+      bonusNome: bonusTitle
+    });
+  };
   
   return (
     <Card className="w-full max-w-2xl mx-auto transition-all duration-300">
@@ -97,7 +145,11 @@ const ResultCard: React.FC = () => {
           
           <div className="space-y-4">
             {bonusItems.map((bonus, index) => (
-              <div key={index} className="flex items-start bg-white p-4 rounded-lg shadow-sm">
+              <div 
+                key={index} 
+                className="flex items-start bg-white p-4 rounded-lg shadow-sm cursor-pointer"
+                onClick={() => handleBonusClick(bonus.title)}
+              >
                 <div className="shrink-0">{bonus.icon}</div>
                 <div className="ml-3 flex-1">
                   <h4 className="font-medium">{bonus.title}</h4>
@@ -109,7 +161,7 @@ const ResultCard: React.FC = () => {
           </div>
         </div>
 
-        <Collapsible open={isOpen} onOpenChange={setIsOpen} className="bg-muted/50 rounded-lg p-4">
+        <Collapsible open={isOpen} onOpenChange={handleGarantiaToggle} className="bg-muted/50 rounded-lg p-4">
           <CollapsibleTrigger className="flex w-full items-center justify-between">
             <div className="flex items-center gap-2">
               <Award className="h-5 w-5 text-primary" />
@@ -180,6 +232,7 @@ const ResultCard: React.FC = () => {
           <Button
             size="lg"
             className="w-full py-6 text-lg font-bold bg-green-500 hover:bg-green-600 text-white"
+            onClick={handleComprarClick}
           >
             <ShoppingCart className="mr-2" />
             Garantir Minha Vaga + Bônus Exclusivos
@@ -200,7 +253,7 @@ const ResultCard: React.FC = () => {
           
           <Button
             variant="ghost"
-            onClick={resetSurvey}
+            onClick={handleRefazerClick}
             className="w-full"
           >
             Refazer o Questionário

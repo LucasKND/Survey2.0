@@ -1,10 +1,11 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SurveyQuestion, SurveyResponse } from '../types/survey';
 import { useSurvey } from '../context/SurveyContext';
 import { Button } from './ui/button';
 import { CheckCircle, Circle } from 'lucide-react';
 import { Input } from './ui/input';
+import { trackClick, trackViewTime, useViewTimeTracking } from '../lib/firebase';
+import { throttle } from '../lib/utils';
 
 interface QuestionCardProps {
   question: SurveyQuestion;
@@ -15,6 +16,7 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [textInput, setTextInput] = useState<string>('');
   const [showOtherInput, setShowOtherInput] = useState<boolean>(false);
+  const endViewTracking = useViewTimeTracking(`question-${question.id}`);
   
   // Find existing response for this question
   useEffect(() => {
@@ -35,10 +37,26 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
       setTextInput('');
       setShowOtherInput(false);
     }
-  }, [question.id, responses]);
+    
+    // Registra view da questão quando o componente monta
+    trackClick(`view-question-${question.id}`, { questionText: question.text });
+    
+    // Quando o componente desmontar, registra o tempo de visualização
+    return () => {
+      endViewTracking();
+    };
+  }, [question.id, responses, endViewTracking, question.text]);
 
   const handleOptionClick = (optionId: string) => {
     let newSelected;
+    
+    // Rastrear clique na opção
+    trackClick(`option-${optionId}`, { 
+      questionId: question.id, 
+      optionId: optionId,
+      questionText: question.text,
+      optionText: question.options?.find(opt => opt.id === optionId)?.text || 'outros'
+    });
     
     // If clicking on "Other" option, show the text input
     if (optionId === 'other') {
@@ -59,6 +77,19 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTextInput(e.target.value);
     submitAnswer(question.id, e.target.value);
+  };
+
+  const handleNextClick = () => {
+    trackClick(question.id === 5 ? 'btn-ver-resultado' : 'btn-proxima', { 
+      questionId: question.id,
+      selectedOptions: selectedOptions
+    });
+    nextQuestion();
+  };
+  
+  const handlePrevClick = () => {
+    trackClick('btn-anterior', { questionId: question.id });
+    prevQuestion();
   };
 
   const isOptionSelected = (optionId: string) => {
@@ -125,7 +156,7 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
       <div className="flex justify-between mt-8">
         <Button
           variant="outline"
-          onClick={prevQuestion}
+          onClick={handlePrevClick}
           className="px-6"
           disabled={question.id === 1}
         >
@@ -133,7 +164,7 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
         </Button>
         
         <Button
-          onClick={nextQuestion}
+          onClick={handleNextClick}
           className="px-6 bg-survey-dark hover:bg-blue-500 text-white"
           disabled={!hasAnswer()}
         >
